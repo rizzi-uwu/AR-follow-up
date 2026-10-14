@@ -7,7 +7,7 @@ An n8n workflow that automates accounts receivable follow-up in two tiers:
 
 State lives in a single Google Sheet that acts as the source of truth between runs.
 
-![Workflow canvas](docs/canvas.png)
+![Workflow canvas](canvas.png)
 
 ## How it works
 
@@ -56,7 +56,7 @@ Schedule (Mon-Fri 08:00)
 
 ## Google Sheet
 
-![Sheet](docs/sheet.png)
+![Sheet](sheet.png)
 
 Create a sheet with a tab (for example `AR Reminder Sheet`) and these headers in row 1, spelled exactly like this:
 
