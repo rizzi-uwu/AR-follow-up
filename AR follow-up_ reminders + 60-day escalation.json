@@ -1,0 +1,570 @@
+{
+  "name": "AR follow-up: reminders + 60-day escalation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "8ac1ddaa-1969-41bd-bd7f-9e4e2ca31fa8",
+      "name": "Weekday 08:00 Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        32,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs",
+          "mode": "list",
+          "cachedResultName": "AR follow up",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "53b179db-59c0-4582-96f3-a3fc53d92377",
+      "name": "Get open invoices",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        464
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "isdReYxy65Xf9PRv",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst today = $now.setZone('Europe/Berlin').startOf('day');\nconst todayStr = today.toFormat('yyyy-MM-dd');\n\nfunction parse(v) {\n  if (v === undefined || v === null || String(v).trim() === '') return null;\n  const s = String(v).trim();\n  let d = DateTime.fromISO(s, { zone: 'Europe/Berlin' });\n  if (!d.isValid) d = DateTime.fromFormat(s, 'dd.MM.yyyy', { zone: 'Europe/Berlin' });\n  if (!d.isValid) d = DateTime.fromFormat(s, 'M/d/yyyy', { zone: 'Europe/Berlin' });\n  return d.isValid ? d.startOf('day') : null;\n}\nconst out = [];\nfor (const item of $input.all()) {\n  const r = item.json;\n  const status = String(r.status || '').trim().toLowerCase();\n  if (!r.invoice_id || ['paid', 'cancelled', 'void'].includes(status)) continue;\n  const due = parse(r.due_date);\n  if (!due) continue;\n  const daysOverdue = Math.floor(today.diff(due, 'days').days);\n  if (daysOverdue <= 0) continue; // not overdue yet\n  const lc = parse(r.last_contacted);\n  const snooze = parse(r.snooze_until);\n  out.push({ json: {\n    invoice_id: String(r.invoice_id).trim(),\n    company: String(r.company || '').trim(),\n    email: String(r.email || '').trim(),\n    due_date: due.toFormat('yyyy-MM-dd'),\n    amount: r.amount,\n    currency: r.currency || '',\n    days_overdue: daysOverdue,\n    last_contacted: lc ? lc.toFormat('yyyy-MM-dd') : null,\n    days_since_contact: lc ? Math.floor(today.diff(lc, 'days').days) : null,\n    notice_status: String(r.notice_status || '').trim(),\n    snooze_until: snooze ? snooze.toFormat('yyyy-MM-dd') : null,\n    snoozed: snooze ? snooze > today : false,\n  }});\n}\nreturn out;\n"
+      },
+      "id": "1852fe07-d951-45a2-8313-dc80b1fe7e75",
+      "name": "Normalize & compute aging",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c833dabf-59e5-4d9d-831d-2c8fcbc86e9f",
+              "leftValue": "={{ $json.days_overdue >= 60 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "886a104c-8596-4be0-a751-5f438e45fb21",
+      "name": "AR_Aging_Filter (>=60 days)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        688,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7838bab1-f143-4d13-9ac7-274e3c43d9a1",
+              "leftValue": "={{ $json.days_since_contact === null || $json.days_since_contact >= 7 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6c68b7ba-1199-4594-93c0-56260f729f7e",
+      "name": "Last_Contacted_Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4269b1e9-9d93-462f-8b82-7e919d85f7c7",
+              "leftValue": "={{ $json.notice_status.toLowerCase() !== 'sent' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a59f464f-d84a-45be-a5ba-7d317d156ef5",
+      "name": "Notice_Sent filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1152,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst today = $now.setZone('Europe/Berlin').startOf('day');\nconst todayStr = today.toFormat('yyyy-MM-dd');\n\nconst groups = {};\nfor (const { json: r } of $input.all()) {\n  const key = r.email.toLowerCase() + '|' + r.company;\n  (groups[key] = groups[key] || []).push(r);\n}\nconst fmt = (r) => `${Number(String(r.amount).replace(',', '.')).toFixed(2)} ${r.currency}`.trim();\nreturn Object.values(groups).map((rows) => {\n  rows.sort((a, b) => b.days_overdue - a.days_overdue);\n  const ids = rows.map((r) => r.invoice_id);\n  const shown = ids.slice(0, 3).join(', ') + (ids.length > 3 ? ` (+${ids.length - 3} more)` : '');\n  const lines = rows.map((r) =>\n    `<li>Invoice <b>${r.invoice_id}</b> &ndash; ${fmt(r)}, due ${r.due_date} (${r.days_overdue} days overdue)</li>`).join('');\n  const body = `<p>Dear ${rows[0].company} accounts team,</p>` +\n    `<p>Our records show the following ${rows.length > 1 ? 'invoices are' : 'invoice is'} still open:</p>` +\n    `<ul>${lines}</ul>` +\n    `<p>If payment has already been made, please disregard this message and send us the remittance details. ` +\n    `If you have any questions about ${rows.length > 1 ? 'these invoices' : 'this invoice'}, just reply to this email.</p>` +\n    `<p>Kind regards,<br>Accounts Receivable</p>`;\n  return { json: {\n    company: rows[0].company, email: rows[0].email, invoice_ids: ids,\n    subject: `Payment reminder: ${shown} - ${rows[0].company}`, body,\n  }};\n});\n"
+      },
+      "id": "87dae5b3-2221-4026-b8a6-7439b1fef7ca",
+      "name": "Group by company (<60)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e7df5e18-f75b-4044-aafe-b627a8cfe421",
+      "name": "Send reminder (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1584,
+        544
+      ],
+      "webhookId": "634966b6-f714-4c9e-94ee-03c9a7a6e606",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "lxAjSnjoUmIzNnCl",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst today = $now.setZone('Europe/Berlin').startOf('day');\nconst todayStr = today.toFormat('yyyy-MM-dd');\n\n// One item per invoice, aligned with the grouped items that went into Gmail.\nconst groups = $('Group by company (<60)').all();\nconst out = [];\nfor (const g of groups) {\n  for (const id of g.json.invoice_ids) out.push({ json: { invoice_id: id, last_contacted: todayStr } });\n}\nreturn out;\n"
+      },
+      "id": "d60deb76-7b13-49f7-ad94-18c985e767a0",
+      "name": "Expand invoice IDs (A)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs",
+          "mode": "list",
+          "cachedResultName": "AR follow up",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "f70857b0-762a-41f3-b969-4d5b878f937e",
+      "name": "Update last_contacted",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2032,
+        544
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "isdReYxy65Xf9PRv",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30c7942e-0bbc-4c4c-8dd7-08dd9b4c9207",
+              "leftValue": "={{ $json.notice_status.toLowerCase() !== 'sent' && !$json.snoozed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1628a9d-8cb9-4ffe-9959-ab31d1cda467",
+      "name": "Notice_Sent_DSO_60 filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst today = $now.setZone('Europe/Berlin').startOf('day');\nconst todayStr = today.toFormat('yyyy-MM-dd');\n\nconst groups = {};\nfor (const { json: r } of $input.all()) {\n  const key = r.email.toLowerCase() + '|' + r.company;\n  (groups[key] = groups[key] || []).push(r);\n}\nconst fmt = (r) => `${Number(String(r.amount).replace(',', '.')).toFixed(2)} ${r.currency}`.trim();\nreturn Object.values(groups).map((rows) => {\n  rows.sort((a, b) => b.days_overdue - a.days_overdue);\n  const lines = rows.map((r) =>\n    `<li>${r.invoice_id} &ndash; ${fmt(r)}, due ${r.due_date}, <b>${r.days_overdue} days overdue</b>` +\n    `${r.last_contacted ? ', last contacted ' + r.last_contacted : ', never contacted'}</li>`).join('');\n  const message = `<p><b>${rows[0].company}</b> (${rows[0].email}) has ${rows.length} invoice(s) 60+ days overdue ` +\n    `with no formal notice recorded:</p><ul>${lines}</ul>` +\n    `<p>Choose a decision below:<br>` +\n    `<b>Sent</b> = formal notice has gone out, mark complete<br>` +\n    `<b>Delayed</b> = client granted more time, re-check in 14 days<br>` +\n    `<b>Not processed</b> = skip for now (dispute, credit hold), re-check in 7 days</p>`;\n  return { json: {\n    company: rows[0].company, email: rows[0].email,\n    invoice_ids: rows.map((r) => r.invoice_id),\n    subject: `[AR escalation] ${rows[0].company} - ${rows.length} invoice(s) 60+ days overdue`,\n    message,\n  }};\n});\n"
+      },
+      "id": "35864799-b312-4fa4-b916-f85b0aa9a3b0",
+      "name": "Group by company (60+)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "finance.lead@example.com",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.message }}",
+        "responseType": "customForm",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Sent"
+                  },
+                  {
+                    "option": "Delayed"
+                  },
+                  {
+                    "option": "Not processed"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "resumeAmount": 20
+            }
+          }
+        }
+      },
+      "id": "9e708e1d-fced-40b8-9dbc-c48b3ccc8973",
+      "name": "Ask finance lead (HITL)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        320
+      ],
+      "webhookId": "1a97cbc7-031f-43ce-98b4-ad4ff27bac37",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "lxAjSnjoUmIzNnCl",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst today = $now.setZone('Europe/Berlin').startOf('day');\nconst todayStr = today.toFormat('yyyy-MM-dd');\n\n// The wait node returns only the form response, so pull the invoice list from the grouping node by position.\nconst groups = $('Group by company (60+)').all();\nconst responses = $input.all();\nconst out = [];\nresponses.forEach((item, i) => {\n  const g = groups[i].json;\n  const raw = String((item.json.data && item.json.data.Decision) || item.json.Decision || '').trim().toLowerCase();\n  let status, snoozeDays;\n  if (raw === 'sent') { status = 'Sent'; snoozeDays = null; }\n  else if (raw === 'delayed') { status = 'Delayed'; snoozeDays = 14; }\n  else if (raw === 'not processed') { status = 'Not processed'; snoozeDays = 7; }\n  else { status = 'No response'; snoozeDays = 1; } // timed out: ask again next run\n  const snooze = snoozeDays ? today.plus({ days: snoozeDays }).toFormat('yyyy-MM-dd') : '';\n  for (const id of g.invoice_ids) {\n    out.push({ json: { invoice_id: id, notice_status: status, snooze_until: snooze, decision_date: todayStr } });\n  }\n});\nreturn out;\n"
+      },
+      "id": "ec732735-06a4-4541-bbe9-1283730dad80",
+      "name": "Interpret decision & set snooze",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs",
+          "mode": "list",
+          "cachedResultName": "AR follow up",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EdADH_mDgovZ22vkgh4i92wU92E-L1bFbLYex-jEojs/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "9711487f-ec5a-40b5-909d-df91af747b12",
+      "name": "Update notice status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1808,
+        320
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "isdReYxy65Xf9PRv",
+          "name": "Google Sheets account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Weekday 08:00 Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get open invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get open invoices": {
+      "main": [
+        [
+          {
+            "node": "Normalize & compute aging",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & compute aging": {
+      "main": [
+        [
+          {
+            "node": "AR_Aging_Filter (>=60 days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AR_Aging_Filter (>=60 days)": {
+      "main": [
+        [
+          {
+            "node": "Notice_Sent_DSO_60 filter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Last_Contacted_Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Last_Contacted_Filter": {
+      "main": [
+        [
+          {
+            "node": "Notice_Sent filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notice_Sent filter": {
+      "main": [
+        [
+          {
+            "node": "Group by company (<60)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group by company (<60)": {
+      "main": [
+        [
+          {
+            "node": "Send reminder (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send reminder (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "Expand invoice IDs (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand invoice IDs (A)": {
+      "main": [
+        [
+          {
+            "node": "Update last_contacted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notice_Sent_DSO_60 filter": {
+      "main": [
+        [
+          {
+            "node": "Group by company (60+)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group by company (60+)": {
+      "main": [
+        [
+          {
+            "node": "Ask finance lead (HITL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask finance lead (HITL)": {
+      "main": [
+        [
+          {
+            "node": "Interpret decision & set snooze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpret decision & set snooze": {
+      "main": [
+        [
+          {
+            "node": "Update notice status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "4d180a46-b0ff-44e6-92e0-d926c8bb43aa",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9ab4199a04f5736f3bcff803893bdeafafca4e0090a8eaca3e3792a31f430f64"
+  },
+  "nodeGroups": [],
+  "id": "o7pgU0Rm21wTKFbl",
+  "tags": []
+}

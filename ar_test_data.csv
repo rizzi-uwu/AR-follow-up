@@ -1,0 +1,13 @@
+invoice_id,company,email,due_date,amount,currency,status,last_contacted,notice_status,snooze_until,decision_date
+T-001,Test GmbH,yourname+testgmbh@gmail.com,2026-10-04,500,EUR,open,,,,
+T-002,Test GmbH,yourname+testgmbh@gmail.com,2026-09-14,1200,EUR,open,,,,
+T-003,Alpha Corp,yourname+alpha@gmail.com,2026-09-20,750,EUR,open,2026-10-10,,,
+T-004,Beta Ltd,yourname+beta@gmail.com,2026-09-25,980,EUR,open,2026-10-06,,,
+T-005,Gamma SA,yourname+gamma@gmail.com,2026-10-20,300,EUR,open,,,,
+T-006,Delta GmbH,yourname+delta@gmail.com,2026-09-01,640,EUR,paid,,,,
+T-007,Epsilon AG,yourname+epsilon@gmail.com,2026-08-15,2100,EUR,open,,,,
+T-008,Epsilon AG,yourname+epsilon@gmail.com,2026-07-15,3400,EUR,open,,,,
+T-009,Zeta GmbH,yourname+zeta@gmail.com,2026-07-01,1800,EUR,open,2026-09-01,Sent,,
+T-010,Eta Inc,yourname+eta@gmail.com,2026-08-01,2750,EUR,open,,,2026-10-20,
+T-011,Theta KG,yourname+theta@gmail.com,2026-08-10,1500,EUR,open,,,2026-10-10,
+T-012,Iota Co,yourname+iota@gmail.com,2026-08-16,890,EUR,open,,,,
